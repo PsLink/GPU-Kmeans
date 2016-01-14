@@ -62,32 +62,32 @@ __global__ void findNewClusterIndex(int numObjects, int numAttributes, const flo
 
 __global__ void updateNewCluster(int numObjects, int numAttributes, const float* __restrict__ attributes, \
     int numClusters, const float* __restrict__ clusters, int* __restrict__ membership, \
-    int* __restrict__ new_centers_len, float* __restrict__ new_centers, float* __restrict__ delta, float* __restrict__ s){
+    int* __restrict__ new_centers_len, float* __restrict__ new_centers, float* __restrict__ delta){
 
-    // extern __shared__ float s[]; //__shared__
+    extern __shared__ float s[]; //__shared__
 
     int tid = blockDim.x*blockIdx.x + threadIdx.x;
 
-    // for(int i = threadIdx.x; i < numClusters*numAttributes; i += blockDim.x){
-    //     s[i] = 0.0f;
-    // }
+    for(int i = threadIdx.x; i < numClusters*numAttributes; i += blockDim.x){
+        s[i] = 0.0f;
+    }
 
-    // __syncthreads();
+    __syncthreads();
 
     if(tid < numObjects){
         int index = membership[tid];
         for(int j = 0; j < numAttributes; j++){ 
-            atomicAdd(new_centers+index*numAttributes+j, attributes[tid + numObjects*j]);
+            atomicAdd(s+index*numAttributes+j, attributes[tid + numObjects*j]);
         }
     }
 
     __syncthreads();
 
-    //for(int i = 0; i < numClusters; i++){
-    //    for(int j = threadIdx.x; j < numAttributes; j += blockDim.x){ 
-    //        atomicAdd(new_centers+i*numAttributes+j, s[j + numAttributes*i]);
-    //    }
-   // }
+    for(int i = 0; i < numClusters; i++){
+        for(int j = threadIdx.x; j < numAttributes; j += blockDim.x){ 
+            atomicAdd(new_centers+i*numAttributes+j, s[j + numAttributes*i]);
+        }
+    }
 }
 
 __global__ void updateCenter(int numClusters, int numAttributes, float* __restrict__ clusters,\
@@ -105,12 +105,12 @@ __global__ void updateCenter(int numClusters, int numAttributes, float* __restri
 
 /*----< kmeans_clustering() >---------------------------------------------*/
 void kmeans_clustering(int     numObjects,
-   int     numAttributes,
+ int     numAttributes,
                                                  float *attributes,    /* in: [numObjects][numAttributes] */
-   int    *membership,
-   int     numClusters,
-   float*  clusters,
-   float   threshold){
+ int    *membership,
+ int     numClusters,
+ float*  clusters,
+ float   threshold){
 
         int     *d_new_centers_len; /* [numClusters]: no. of points in each cluster */
     cudaMalloc((void**)&d_new_centers_len, numClusters*sizeof(int));
@@ -134,35 +134,19 @@ void kmeans_clustering(int     numObjects,
     cudaMemcpy(d_clusters, clusters, numClusters*numAttributes*sizeof(float), cudaMemcpyDefault);
 
     float delta = 0.0;
-   
-    float *s;
-    s = (float *)calloc(numClusters*numAttributes,sizeof(float));
-    
-    float *d_s;
-    cudaMalloc((void**)&d_s, numClusters*numAttributes*sizeof(float));
-
 
     do {
         cudaMemset(d_new_centers_len, 0, numClusters*sizeof(int));
         cudaMemset(d_new_centers, 0, numClusters*numAttributes*sizeof(int));
         cudaMemset(d_delta, 0, sizeof(int));
-        cudaMemset(d_s, 0, numClusters*numAttributes*sizeof(float));
 
         int blockSize = 256;
         int gridSize = (numObjects+blockSize-1)/blockSize;
         findNewClusterIndex<<<gridSize, blockSize>>>(numObjects, numAttributes, d_attributes, numClusters, d_clusters, d_membership, d_new_centers_len, d_new_centers, d_delta);
 
-        // updateNewCluster<<<gridSize, blockSize, numClusters*numAttributes*sizeof(float)>>>(numObjects, numAttributes, d_attributes, numClusters, d_clusters, d_membership, d_new_centers_len, d_new_centers, d_delta);
-        updateNewCluster<<<gridSize, blockSize>>>(numObjects, numAttributes, d_attributes, numClusters, d_clusters, d_membership, d_new_centers_len, d_new_centers, d_delta, d_s);
-	
-	cudaMemcpy(s, d_s, numClusters*numAttributes*sizeof(float), cudaMemcpyDefault);
-//	for (int i=0; i<numClusters*numAttributes; i++) {
-//		printf("%f ",s[i]);
-//	}
-//	printf("\n\n");
+        updateNewCluster<<<gridSize, blockSize, numClusters*numAttributes*sizeof(float)>>>(numObjects, numAttributes, d_attributes, numClusters, d_clusters, d_membership, d_new_centers_len, d_new_centers, d_delta);
 
-
-    updateCenter<<<numClusters, blockSize>>>(numClusters, numAttributes, d_clusters, d_new_centers_len, d_new_centers);
+        updateCenter<<<numClusters, blockSize>>>(numClusters, numAttributes, d_clusters, d_new_centers_len, d_new_centers);
 
         //delta /= numObjects;
         cudaMemcpy(&delta, d_delta, sizeof(float), cudaMemcpyDefault);
@@ -179,15 +163,12 @@ void kmeans_clustering(int     numObjects,
     cudaFree(d_attributes);
     cudaFree(d_membership);
     cudaFree(d_clusters);
-    cudaFree(d_s);
-    free(s);
 }
 
 int main(int argc, char **argv) {
     FILE * fin=fopen("oData.txt","r");
     FILE * fout=fopen("output.txt","w");
-    int nums = 4000000,dim = 128,k = 96;
-    int thold = 1000;
+    int nums = 100000,dim = 128,k = 96;
     sscanf(argv[1],"%d",&k);
     sscanf(argv[2],"%d",&nums);
     printf("k=%d\n",k);
@@ -209,39 +190,39 @@ int main(int argc, char **argv) {
         for (int i=0; i<nums; i++) {
             membership[i] = 0;
         }
-        int target;
+	int target;
         for (int i=0; i<k; i++) 
             for (int j=0; j<dim; j++) {
             //cluster[i*dim+j] = rand()%maxd[j];
-               target = rand()%nums;
-               cluster[i*dim+j]=data[target+j*nums];
-           }
+           	 //target = rand()%nums;
+		target = i;
+		 cluster[i*dim+j]=data[target+j*nums];
+		}
 
-           kmeans_clustering(nums,dim,data,membership,k,cluster,thold);
+            kmeans_clustering(nums,dim,data,membership,k,cluster,0);
 
-           for (int i=0; i<k*dim; i++) {
-            if  (i%dim == 0) fprintf(fout,"\n\n");
-            fprintf(fout,"%f ",cluster[i]);
+            for (int i=0; i<k*dim; i++) {
+                if  (i%dim == 0) fprintf(fout,"\n\n");
+                fprintf(fout,"%f ",cluster[i]);
+            }
+            fprintf(fout,"\n\n-----------------------------------------\n\n");
+            memset(countM,k*sizeof(int),0);
+            for (int i=0; i<nums; i++) {
+                fprintf(fout,"%d ",membership[i]);
+                countM[membership[i]]++;
+            }
+            fprintf(fout,"\n\n-----------------------------------------\n\n");
+
+            for (int i=0; i<k; i++) {
+                fprintf(fout,"%d ",countM[i]);
+            }
+            fprintf(fout,"\n\n-----------------------------------------\n\n");
+
+            free(countM);
+            free(membership);
+            free(data);
+            free(cluster);
+            fclose(fin);
+            fclose(fout);
+            return 0;
         }
-        fprintf(fout,"\n\n-----------------------------------------\n\n");
-        memset(countM,k*sizeof(int),0);
-        for (int i=0; i<nums; i++) {
-            fprintf(fout,"%d ",membership[i]);
-            countM[membership[i]]++;
-        }
-        fprintf(fout,"\n\n-----------------------------------------\n\n");
-
-        for (int i=0; i<k; i++) {
-            fprintf(fout,"%d ",countM[i]);
-        }
-        fprintf(fout,"\n\n-----------------------------------------\n\n");
-
-        free(countM);
-        free(membership);
-        free(data);
-        free(cluster);
-        fclose(fin);
-        fclose(fout);
-        return 0;
-    }
-

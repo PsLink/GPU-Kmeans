@@ -8,7 +8,7 @@ FILE * fin=fopen("oData.txt","r");
 FILE * fmark=fopen("group.txt","r");
 FILE * fout=fopen("mData.txt","w");
 
-const int maxPts = 4000000;
+const int maxPts = 1000000;
 const int dim = 128;
 
 short mark[4000005];
