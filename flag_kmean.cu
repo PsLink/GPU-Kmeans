@@ -1,3 +1,8 @@
+/*
+    flag_kmean without syncthreads
+    May have problem
+*/
+
     #include <stdio.h>
     #include <stdlib.h>
     #include <float.h>

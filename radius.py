@@ -1,3 +1,5 @@
+# Calculate the radius of each group.
+
 import math
 import fileinput
 maxPoint = 1000000

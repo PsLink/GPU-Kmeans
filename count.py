@@ -1,3 +1,5 @@
+# Count the points in each groups
+
 import fileinput
 maxV = 0;
 minV = 1000000;

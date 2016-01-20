@@ -1,3 +1,7 @@
+/*
+    Original kmeans using share memory on GPU.
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <float.h>
