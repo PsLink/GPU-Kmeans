@@ -192,7 +192,7 @@ int main(int argc, char **argv) {
     FILE * fin=fopen("oData.txt","r");
     FILE * outC=fopen("outCenter.txt","w");
     FILE * fout=fopen("output.txt","w");
-    int nums = 4000000,dim = 128,k = 96;
+    int nums = 1000000,dim = 128,k = 1500;
     int thold = 500;
     sscanf(argv[1],"%d",&k);
     sscanf(argv[2],"%d",&nums);
